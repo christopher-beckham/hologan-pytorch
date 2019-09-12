@@ -88,11 +88,25 @@ class HoloGAN(GAN):
         return np.asarray(angles)
 
     def get_theta(self, angles):
-        """
-        :param angles a matrix in form (bs, 3),
-          where the first column is yaw, second
-          column is pitch, and last column is roll.
-        """
+        '''Construct a rotation matrix from angles.
+
+        Notes
+        -----
+
+        You will notice in the code that I am:
+          - passing `angles_y` into `rot_matrix_x`
+          - passing `angles_z` into `rot_matrix_y``
+          - and passing `angles_x` into `rot_matrix_z`.
+        This is intentional!!! I was exploring the effect of these
+        rotation matrices on a toy MNIST example, and it appears that:
+          - `rot_matrix_y` appears to be controlling yaw (which I call 'z')
+          - `rot_matrix_x` appears to be controlling pitch (which I call 'y')
+          - `rot_matrix_z` appears to be controlling roll (which I call 'x')`.
+
+        I have no idea if this is some weird thing going on with the STN
+        module, or if I have incorrectly defined the rotation matrix
+        functions here.
+        '''
         bs = len(angles)
         theta = np.zeros((bs, 3, 4))
 

@@ -19,7 +19,6 @@ class GAN:
                  disc_fn,
                  z_dim,
                  lamb=0.,
-                 beta=0.,
                  opt_g=optim.Adam,
                  opt_d=optim.Adam,
                  opt_mi=optim.Adam,
@@ -39,7 +38,7 @@ class GAN:
         self.g = gen_fn
         self.d = disc_fn
         self.lamb = lamb
-        self.beta = beta
+        self.beta = 0.0
         optim_g = opt_g(filter(lambda p: p.requires_grad,
                                self.g.parameters()), **opt_g_args)
         optim_d = opt_d(filter(lambda p: p.requires_grad,

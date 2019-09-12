@@ -32,7 +32,6 @@ kwargs_for_name = {
     'ndf': ('ndf', id_),
     'lr': ('lr', id_),
     'lamb': ('lamb', id_),
-    'beta': ('beta', id_),
     'angles': ('angles', lambda x: x[1:-1].replace(",","_")),
     'update_g_every': ('g', id_),
     'beta1': ('b1', id_),
@@ -73,7 +72,6 @@ def parse_args():
     parser.add_argument('--z_dim', type=int, default=128)
     parser.add_argument('--z_extra_fc', action='store_true')
     parser.add_argument('--lamb', type=float, default=0.)
-    parser.add_argument('--beta', type=float, default=0.)
     parser.add_argument('--lr_g', type=float, default=2e-4)
     parser.add_argument('--lr_d', type=float, default=2e-4)
     parser.add_argument('--beta1', type=float, default=0.)
@@ -85,7 +83,7 @@ def parse_args():
     parser.add_argument('--save_images_every', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--resume', type=str, default='auto')
-    parser.add_argument('--trial_id', type=int, default=None)
+    parser.add_argument('--trial_id', type=str, default=None)
     parser.add_argument('--interactive', action='store_true')
     parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
@@ -159,7 +157,6 @@ gan = HoloGAN(
     disc_fn=disc,
     z_dim=args['z_dim'],
     lamb=args['lamb'],
-    beta=args['beta'],
     angles=angles,
     opt_d_args={'lr': args['lr_d'], 'betas': (args['beta1'], args['beta2'])},
     opt_g_args={'lr': args['lr_g'], 'betas': (args['beta1'], args['beta2'])},
