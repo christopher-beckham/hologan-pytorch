@@ -8,7 +8,7 @@ def get_network(z_dim, ngf, ndf, use_64px=False, z_extra_fc=False):
                   use_64px=use_64px)
     #gen = Generator(z_dim=z_dim, nf=ngf)
     disc = Discriminator(nf=ndf,
-                         z_dim=3,
+                         z_dim=z_dim,
                          sigmoid=True,
                          spec_norm=True,
                          lite=False if use_64px else True,

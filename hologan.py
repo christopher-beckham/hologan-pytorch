@@ -201,13 +201,10 @@ class HoloGAN(GAN):
                 thetas = thetas.cuda()
             aux_loss = 0.
             if self.lamb > 0.:
-                angles_t = torch.from_numpy(angles).float()
-                if x.is_cuda:
-                    angles_t = angles_t.cuda()
-                _, angle_pred = self.d(self.g(z, thetas))
-                angle_loss = torch.mean(torch.abs(angle_pred-angles_t))
-                losses['angle_loss'] = angle_loss.item()
-                aux_loss += self.lamb*angle_loss
+                _, z_pred = self.d(self.g(z, thetas))
+                z_loss = torch.mean(torch.abs(z-z_pred))
+                aux_loss += self.lamb*z_loss
+                losses['z_loss'] = z_loss.item()
             if self.beta > 0:
                 raise NotImplementedError()
                 #angles = torch.from_numpy(angles).float()
