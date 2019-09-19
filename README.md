@@ -78,4 +78,4 @@ Here are some images from one of these experiments:
 correspond to the range of poses observed on that axis for the dataset)
 </p>
 
-What we can also see is that the rotations oscillate from left-right-left
+What we can also see is that the rotations oscillate from left-right-left rather than smoothly transitioning from left to right (and vice versa). The original paper shows the latter kind of oscillation, and currently it's not clear to me why I'm not able to achieve it (or if it's even easy to accomplish in an unsupervised setting).
