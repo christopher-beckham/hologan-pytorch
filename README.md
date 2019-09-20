@@ -6,6 +6,10 @@ I do not claim or guarantee any correctness of this implementation. This was imp
 of the original authors of the paper or other code (though as of time of writing, I was not able to find any other implementation
 of this on Github).
 
+There are two issues I am trying to iron out (see my 'notes' section below):
+- Stability of the identity regulariser term
+- Oscilliating rotations
+
 ## How to run
 
 First, download the CelebA dataset, extract the images inside `img_align_celeba` to some directory, and export the environment 
