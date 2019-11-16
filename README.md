@@ -1,5 +1,7 @@
 # hologan-pytorch
 
+**NOTE: I think I found one of the issues of this implementation. It turns out that the grid sampler in PyTorch does not support trilinear sampling for volumes. I am currently testing out my own implementation of it, and will update soon.**
+
 This repo is a loose reimplementation of HoloGAN, originally by Nguyen-Phuoc et al: https://arxiv.org/abs/1904.01326
 
 I do not claim or guarantee any correctness of this implementation. This was implemented indepedently without consulting any
