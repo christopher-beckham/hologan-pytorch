@@ -14,7 +14,7 @@ There are two issues I am trying to iron out (see my 'notes' section below):
 ## How to run
 
 First, download the CelebA dataset, extract the images inside `img_align_celeba` to some directory, and export the environment 
-variable `DATASET_CELEBA` to point to this folder (for instance, by running the command `export DATASET_CELEBA=/datasets/celeba/img_align_celeba`).
+variable `DATASET_CELEBA` to point to this folder (for instance, by running the command `export DATASET_CELEBA=/datasets/celeba/img_align_celeba`). (Note: this is not the same as the CelebA in the paper, which seems to have undergone some post-processing to crop background. The scripts to generate this dataset are not available in the official HoloGAN repo.)
 
 Then, run `python task_launcher.py`. To run an example training script, cd into `exps` and run `test.sh`. For the sake of
 convenience, I have also pasted the contents of the script here:
