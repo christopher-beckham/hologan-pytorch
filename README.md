@@ -1,7 +1,5 @@
 # hologan-pytorch
 
-**NOTE: I think I found one of the issues of this implementation. It turns out that the grid sampler in PyTorch does not support trilinear sampling for volumes. I am currently testing out my own implementation of it, and will update soon.**
-
 This repo is a loose reimplementation of HoloGAN, originally by Nguyen-Phuoc et al: https://arxiv.org/abs/1904.01326
 
 I do not claim or guarantee any correctness of this implementation. This was implemented indepedently without consulting any
@@ -9,8 +7,9 @@ of the original authors of the paper or other code (though as of time of writing
 of this on Github).
 
 There are two issues I am trying to iron out (see my 'notes' section below):
-- Stability of the identity regulariser term
-- Oscilliating rotations
+- Stability of the identity regulariser term (this might require a reformulation of the discriminator network to have a deeper/wider branch for the z prediction)
+- Oscilliating rotations (i.e. left-right-left-right behaviour, rather than left-right)
+- Official code uses trilinear sampling for rotation. PyTorch only has bilinear for 3D. TODO add trilinear, though it is slow since it's not a C/CUDA implementation.
 
 ## How to run
 
