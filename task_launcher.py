@@ -4,73 +4,46 @@ import os
 import argparse
 from hologan import HoloGAN
 import torch
+import numpy as np
+import tempfile
+import random
+import string
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 from iterators.datasets import CelebADataset
 from torchvision.transforms import transforms
 from architectures import arch
 from collections import OrderedDict
-from tools import (count_params)
+from tools import (count_params, generate_rotations)
 
 use_shuriken = False
 try:
+    # This only applies to me. If you're not me,
+    # don't worry about this code.
     from shuriken.utils import get_hparams
     use_shuriken = True
 except:
     pass
 
-# This dictionary's keys are the ones that are used
-# to auto-generate the experiment name. The values
-# of those keys are tuples, the first element being
-# shortened version of the key (e.g. 'dataset' -> 'ds')
-# and a function which may optionally shorten the value.
-id_ = lambda x: str(x)
-kwargs_for_name = {
-    'arch': ('arch', lambda x: os.path.basename(x)),
-    'batch_size': ('bs', id_),
-    'ngf': ('ngf', id_),
-    'ndf': ('ndf', id_),
-    'lr': ('lr', id_),
-    'lamb': ('lamb', id_),
-    'angles': ('angles', lambda x: x[1:-1].replace(",","_")),
-    'update_g_every': ('g', id_),
-    'beta1': ('b1', id_),
-    'beta2': ('b2', id_),
-    'use_64px': ('use_64px', id_),
-    'trial_id': ('_trial', id_),
-    'z_extra_fc': ('dxz', id_)
-}
-
-def generate_name_from_args(dd):
-    buf = {}
-    for key in dd:
-        if key in kwargs_for_name:
-            if dd[key] is None:
-                continue
-            new_name, fn_to_apply = kwargs_for_name[key]
-            new_val = fn_to_apply(dd[key])
-            if dd[key] is True:
-                new_val = ''
-            buf[new_name] = new_val
-    buf_sorted = OrderedDict(sorted(buf.items()))
-    #tags = sorted(tags.split(","))
-    name = ",".join([ "%s=%s" % (key, buf_sorted[key]) for key in buf_sorted.keys()])
-    return name
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--name', type=str, default=None)
     parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--angles', type=str, default="[0,0,0,360,0,0]")
-    parser.add_argument('--use_64px', action='store_true')
+    parser.add_argument('--angles', type=str, default="[0,0,-45,45,0,0]",
+                        help="""
+                        A string that should eval() into a list of 6
+                        values corresponding to the min/max for sampling
+                        (uniformly) degree values from axes x, y, and z,
+                        respectively.
+                        (Note that the 'y' axis here is the one pointing
+                        up/down, denoting the yaw.)
+                        """)
     parser.add_argument('--ngf', type=int, default=64)
     parser.add_argument('--ndf', type=int, default=32)
     parser.add_argument('--nmf', type=int, default=32)
     parser.add_argument('--nb', type=int, default=2) # num blocks
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--z_dim', type=int, default=128)
-    parser.add_argument('--z_extra_fc', action='store_true')
     parser.add_argument('--lamb', type=float, default=0.)
     parser.add_argument('--lr_g', type=float, default=2e-4)
     parser.add_argument('--lr_d', type=float, default=2e-4)
@@ -92,10 +65,9 @@ def parse_args():
 args = parse_args()
 args = vars(args)
 
-print("args before shuriken:")
-print(args)
-
 if use_shuriken:
+    # This only applies to me. If you're not me,
+    # don't worry about this code.
     shk_args = get_hparams()
     print("shk args:", shk_args)
     # Stupid bug that I have to fix: if an arg is ''
@@ -108,18 +80,22 @@ if use_shuriken:
 if args['trial_id'] is None and 'SHK_TRIAL_ID' in os.environ:
     print("SHK_TRIAL_ID found so injecting this into `trial_id`...")
     args['trial_id'] = os.environ['SHK_TRIAL_ID']
+else:
+    if args['trial_id'] is None:
+        print("trial_id not defined so generating random id...")
+        trial_id = "".join([ random.choice(string.ascii_letters[0:26]) for j in range(5) ])
+        args['trial_id'] = trial_id
 
-if args['name'] is None and 'SHK_EXPERIMENT_ID' in os.environ:
+if 'SHK_EXPERIMENT_ID' in os.environ:
     print("SHK_EXPERIMENT_ID found so injecting this into `name`...")
     args['name'] = os.environ['SHK_EXPERIMENT_ID']
-
-name = generate_name_from_args(args)
+else:
+    if args['name'] is None:
+        raise Exception("You must give a name to this experiment")
 
 torch.manual_seed(args['seed'])
 
-# This is the one from the progressive growing GAN
-# code.
-IMG_HEIGHT = 64 if args['use_64px'] else 32
+IMG_HEIGHT = 64
 train_transforms = [
     transforms.Resize(IMG_HEIGHT),
     transforms.CenterCrop(IMG_HEIGHT),
@@ -137,11 +113,9 @@ loader = DataLoader(ds,
 if args['save_path'] is None:
     args['save_path'] = os.environ['RESULTS_DIR']
 
-gen, disc = arch.get_network(args['z_dim'],
+gen, disc = arch.get_network(z_dim=args['z_dim'],
                              ngf=args['ngf'],
-                             ndf=args['ndf'],
-                             use_64px=True if args['use_64px'] else False,
-                             z_extra_fc=args['z_extra_fc'])
+                             ndf=args['ndf'])
 
 print("Generator:")
 print(gen)
@@ -149,7 +123,6 @@ print(count_params(gen))
 print("Disc:")
 print(disc)
 print(count_params(disc))
-
 
 angles = eval(args['angles'])
 gan = HoloGAN(
@@ -175,7 +148,7 @@ def _image_handler(gan, out_dir, batch_size=32):
                     epoch = kwargs['epoch']
                     z_batch = gan.sample_z(batch_size)
                     z_batch = z_batch.cuda()
-                    for key in ['yaw', 'pitch', 'roll']:
+                    for key in ['x', 'y', 'z']:
                         rot = gan._generate_rotations(z_batch,
                                                       min_angle=gan.angles['min_angle_%s' % key],
                                                       max_angle=gan.angles['max_angle_%s' % key],
@@ -188,16 +161,13 @@ def _image_handler(gan, out_dir, batch_size=32):
 
     return _image_handler
 
-
-if args['name'] is None:
-    save_path = "%s/s%i" % (args['save_path'], args['seed'])
-else:
-    save_path = "%s/s%i/%s" % (args['save_path'], args['seed'], args['name'])
+save_path = "%s/s%i/%s" % \
+    (args['save_path'], args['seed'], args['name'])
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 
 
-expt_dir = "%s/%s" % (save_path, name)
+expt_dir = "%s/%s" % (save_path, args['trial_id'])
 if not os.path.exists(expt_dir):
     os.makedirs(expt_dir)
 
@@ -231,30 +201,47 @@ if args['interactive']:
     if gan.use_cuda:
         z_batch = z_batch.cuda()
 
-    import numpy as np
+    for axis in ['x', 'y', 'z']:
+        print("Generating frames for axis %s..." % axis)
 
-    # -45 to +45 deg
-    rot = gan._generate_rotations(z_batch,
-                                  min_angle=-2*np.pi,
-                                  max_angle=2*np.pi,
-                                  num=50)
-    padding = torch.zeros_like(rot['yaw'][0])+0.5
+        tmp_dir = tempfile.mkdtemp()
+        print("Temp dir: %s" % tmp_dir)
 
-    imgs = torch.cat(rot['yaw'] + \
-                     [padding] + \
-                     rot['pitch'] + \
-                     [padding] + \
-                     rot['roll'], dim=0)
+        out_mp4_dir = "%s/%s/%s" % \
+            (args['save_path'], args['name'], axis)
+        print("Destination dir for mp4: %s" % out_mp4_dir)
 
-    save_image( imgs,
-                nrow=bs,
-                filename="%s/%s/gen_z.png" % (args['save_path'],
-                                              args['name']))
+        if not os.path.exists(out_mp4_dir):
+            os.makedirs(out_mp4_dir)
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
 
+        generate_rotations(gan,
+                           z_batch,
+                           tmp_dir,
+                           num=200,
+                           min_angle=-np.pi/2,
+                           max_angle=np.pi/2)
 
+        # Remove old mp4 file if it exists.
+        if os.path.exists("%s/out.mp4" % out_mp4_dir):
+            os.remove("%s/out.mp4" % out_mp4_dir)
 
-    #import pdb
-    #pdb.set_trace()
+        from subprocess import check_output
+        fps = 48
+        crf = 4
+
+        ffmpeg_out = check_output(
+            "cd %s; ffmpeg -framerate %i -pattern_type glob -i '*.png' -crf %i -c:v libx264 out.mp4" % (tmp_dir, fps, crf),
+            shell=True)
+        ffmpeg_out = ffmpeg_out.decode('utf-8').rstrip()
+        print(ffmpeg_out)
+
+        copy_out = check_output(
+            "cp %s/out.mp4 %s/out.mp4" % (tmp_dir, out_mp4_dir),
+            shell=True
+        )
+        print(copy_out)
 
 else:
     gan.train(itr=loader,

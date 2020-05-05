@@ -9,9 +9,9 @@ class HoloGAN(GAN):
         super(HoloGAN, self).__init__(*args, **kwargs)
         self.angles = self._angles_to_dict(angles)
         self.rot2idx = {
-            'yaw': 0,
-            'pitch': 1,
-            'roll': 2
+            'x': 0,
+            'y': 1,
+            'z': 2
         }
 
     def _to_radians(self, deg):
@@ -19,12 +19,12 @@ class HoloGAN(GAN):
 
     def _angles_to_dict(self, angles):
         angles = {
-            'min_angle_yaw': self._to_radians(angles[0]),
-            'max_angle_yaw': self._to_radians(angles[1]),
-            'min_angle_pitch': self._to_radians(angles[2]),
-            'max_angle_pitch': self._to_radians(angles[3]),
-            'min_angle_roll': self._to_radians(angles[4]),
-            'max_angle_roll': self._to_radians(angles[5])
+            'min_angle_x': self._to_radians(angles[0]),
+            'max_angle_x': self._to_radians(angles[1]),
+            'min_angle_y': self._to_radians(angles[2]),
+            'max_angle_y': self._to_radians(angles[3]),
+            'min_angle_z': self._to_radians(angles[4]),
+            'max_angle_z': self._to_radians(angles[5])
         }
         return angles
 
@@ -70,19 +70,19 @@ class HoloGAN(GAN):
 
     def sample_angles(self,
                       bs,
-                      min_angle_yaw,
-                      max_angle_yaw,
-                      min_angle_pitch,
-                      max_angle_pitch,
-                      min_angle_roll,
-                      max_angle_roll):
+                      min_angle_x,
+                      max_angle_x,
+                      min_angle_y,
+                      max_angle_y,
+                      min_angle_z,
+                      max_angle_z):
         """Sample random yaw, pitch, and roll angles"""
         angles = []
         for i in range(bs):
             rnd_angles = [
-                np.random.uniform(min_angle_yaw, max_angle_yaw),
-                np.random.uniform(min_angle_pitch, max_angle_pitch),
-                np.random.uniform(min_angle_roll, max_angle_roll),
+                np.random.uniform(min_angle_x, max_angle_x),
+                np.random.uniform(min_angle_y, max_angle_y),
+                np.random.uniform(min_angle_z, max_angle_z),
             ]
             angles.append(rnd_angles)
         return np.asarray(angles)
@@ -90,33 +90,21 @@ class HoloGAN(GAN):
     def get_theta(self, angles):
         '''Construct a rotation matrix from angles.
 
-        Notes
-        -----
+        This uses the Euler angle representation. But
+        it should also work if you use an axis-angle
+        representation.
 
-        You will notice in the code that I am:
-          - passing `angles_y` into `rot_matrix_x`
-          - passing `angles_z` into `rot_matrix_y``
-          - and passing `angles_x` into `rot_matrix_z`.
-        This is intentional!!! I was exploring the effect of these
-        rotation matrices on a toy MNIST example, and it appears that:
-          - `rot_matrix_y` appears to be controlling yaw (which I call 'z')
-          - `rot_matrix_x` appears to be controlling pitch (which I call 'y')
-          - `rot_matrix_z` appears to be controlling roll (which I call 'x')`.
-
-        I have no idea if this is some weird thing going on with the STN
-        module, or if I have incorrectly defined the rotation matrix
-        functions here.
         '''
         bs = len(angles)
         theta = np.zeros((bs, 3, 4))
 
-        angles_yaw = angles[:, 0]
-        angles_pitch = angles[:, 1]
-        angles_roll = angles[:, 2]
+        angles_x = angles[:, 0]
+        angles_y = angles[:, 1]
+        angles_z = angles[:, 2]
         for i in range(bs):
             theta[i] = self.pad_rotmat(
-                np.dot(np.dot(self.rot_matrix_z(angles_roll[i]), self.rot_matrix_y(angles_pitch[i])),
-                       self.rot_matrix_x(angles_yaw[i]))
+                np.dot(np.dot(self.rot_matrix_z(angles_z[i]), self.rot_matrix_y(angles_y[i])),
+                       self.rot_matrix_x(angles_x[i]))
             )
 
         return torch.from_numpy(theta).float()
@@ -128,6 +116,9 @@ class HoloGAN(GAN):
         if self.use_cuda:
             X_batch = X_batch.cuda()
         return [X_batch]
+
+    def sample_z(self, *args, **kwargs):
+        return super(HoloGAN, self).sample_z(*args, **kwargs)
 
     def sample(self, bs, seed=None):
         """Return a sample G(z)"""
@@ -144,7 +135,7 @@ class HoloGAN(GAN):
 
     def _generate_rotations(self,
                             z_batch,
-                            axes=['yaw', 'pitch', 'roll'],
+                            axes=['x', 'y', 'z'],
                             min_angle=None,
                             max_angle=None,
                             num=5):
@@ -176,47 +167,34 @@ class HoloGAN(GAN):
         # Train the generator.
         angles = self.sample_angles(z.size(0), **self.angles)
         thetas = self.get_theta(angles)
+        angles_t = torch.from_numpy(angles).float().cuda()
         if x.is_cuda:
             thetas = thetas.cuda()
         fake = self.g(z, thetas)
-        d_fake, _ = self.d(fake)
+        d_fake, g_z_pred, g_t_pred = self.d(fake)
         gen_loss = self.loss(d_fake, 1)
+        g_z_loss = torch.mean((g_z_pred-z)**2)
+        g_t_loss = torch.mean((g_t_pred-angles_t)**2)
         if (kwargs['iter']-1) % self.update_g_every == 0:
-            gen_loss.backward()
-            #print(self.g.xstart.grad)
+            (gen_loss + self.lamb*(g_z_loss+g_t_loss)).backward()
             self.optim['g'].step()
         # Train the discriminator.
         self.optim['d'].zero_grad()
-        d_fake, _ = self.d(fake.detach())
-        d_real, _ = self.d(x)
+        d_fake, d_z_pred, d_t_pred = self.d(fake.detach())
+        d_real, _, _ = self.d(x)
         d_loss = self.loss(d_real, 1) + self.loss(d_fake, 0)
-        d_loss.backward()
+        d_z_loss = torch.mean((d_z_pred-z)**2)
+        d_t_loss = torch.mean((d_t_pred-angles_t)**2)
+        (d_loss + self.lamb*(d_z_loss+d_t_loss)).backward()
         self.optim['d'].step()
-        # Train both on MI.
-        # g needs it to preseve MI
-        # d needs it so g can use it
-        if self.lamb > 0. or self.beta > 0.:
-            self.optim_mi.zero_grad()
-            if x.is_cuda:
-                thetas = thetas.cuda()
-            aux_loss = 0.
-            if self.lamb > 0.:
-                _, z_pred = self.d(self.g(z, thetas))
-                z_loss = torch.mean(torch.abs(z-z_pred))
-                aux_loss += self.lamb*z_loss
-                losses['z_loss'] = z_loss.item()
-            if self.beta > 0:
-                raise NotImplementedError()
-                #angles = torch.from_numpy(angles).float()
-                #if x.is_cuda:
-                #    angles = angles.cuda()
-                #theta_loss = torch.mean(torch.abs(theta_pred-angles))
-                #losses['theta_loss'] = theta_loss.item()
-                #aux_loss += self.beta*theta_loss
-            aux_loss.backward()
-            self.optim_mi.step()
+
         losses['g_loss'] = gen_loss.item()
         losses['d_loss'] = d_loss.item() / 2.
+        losses['g_z_loss'] = g_z_loss.item()
+        losses['d_z_loss'] = d_z_loss.item()
+        losses['g_t_loss'] = g_t_loss.item()
+        losses['d_t_loss'] = d_t_loss.item()
+
         outputs = {
             'x': x.detach(),
             'gz': fake.detach(),

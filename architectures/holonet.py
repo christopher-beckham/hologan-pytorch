@@ -75,7 +75,7 @@ def _adain_module_2d(z_dim, out_ch):
 
 class HoloNet(nn.Module):
 
-    def __init__(self, nf, out_ch=3, z_dim=128, use_64px=False):
+    def __init__(self, nf, out_ch=3, z_dim=128):
         super(HoloNet, self).__init__()
 
         self.ups_3d = nn.Upsample(scale_factor=2, mode='nearest')
@@ -125,27 +125,71 @@ class HoloNet(nn.Module):
         self.rb1_2d = ResBlock2d(pnf//2, pnf//4)
         self.adain_3, self.z_mlp3 = _adain_module_2d(z_dim, pnf//4)
 
-        if use_64px:
-            self.rb2_2d = ResBlock2d(pnf//4, pnf//8)
-            self.adain_4, self.z_mlp4 = _adain_module_2d(z_dim, pnf//8)
-            self.conv_final = nn.Conv2d(pnf//8, out_ch, 3, padding=1)
-        else:
-            self.conv_final = nn.Conv2d(pnf//4, out_ch, 3, padding=1)
+
+        self.rb2_2d = ResBlock2d(pnf//4, pnf//8)
+        self.adain_4, self.z_mlp4 = _adain_module_2d(z_dim, pnf//8)
+        self.conv_final = nn.Conv2d(pnf//8, out_ch, 3, padding=1)
 
         #self.rb3_2d = ResBlock2d(nf//8, nf//16)
         #self.adain_5, self.z_mlp5 = _adain_module_2d(z_dim, nf//16)
 
         self.tanh = nn.Tanh()
-        self.use_64px = use_64px
+        self.im = 64
+
+    def interpolate_trilinear(self, img, x, y, z):
+        #img = img.cpu()
+        #x = x.cpu()
+        #y = y.cpu()
+        #z = z.cpu()
+
+        x0 = torch.floor(x).long()
+        x1 = x0 + 1
+        y0 = torch.floor(y).long()
+        y1 = y0 + 1
+        z0 = torch.floor(z).long()
+        z1 = z0 + 1
+
+        #print(x0.shape)
+        #print(y0.shape)
+        #print(z0.shape)
+
+        x0 = torch.clamp(x0, min=0, max=img.shape[2] - 1)
+        x1 = torch.clamp(x1, min=0, max=img.shape[2] - 1)
+        y0 = torch.clamp(y0, min=0, max=img.shape[3] - 1)
+        y1 = torch.clamp(y1, min=0, max=img.shape[3] - 1)
+        z0 = torch.clamp(z0, min=0, max=img.shape[4] - 1)
+        z1 = torch.clamp(z1, min=0, max=img.shape[4] - 1)
+
+
+        x_ = x - x0.float()
+        y_ = y - y0.float()
+        z_ = z - z0.float()
+
+        #print(x0)
+        #print("a", img[:,:,x1].shape)
+        #print("b", img[:,:,x1,y0].shape)
+        #print("c", img[:,:,x1,y0,z0].shape)
+
+        out = (img[:,:,x0,y0,z0]*(1-x_)*(1-y_)*(1-z_) +
+                     img[:,:,x1,y0,z0]*x_*(1-y_)*(1-z_) +
+                     img[:,:,x0,y1,z0]*(1-x_)*y_*(1-z_) +
+                     img[:,:,x0,y0,z1]*(1-x_)*(1-y_)*z_ +
+                     img[:,:,x1,y0,z1]*x_*(1-y_)*z_ +
+                     img[:,:,x0,y1,z1]*(1-x_)*y_*z_ +
+                     img[:,:,x1,y1,z0]*x_*y_*(1-z_) +
+                     img[:,:,x1,y1,z1]*x_*y_*z_)
+
+
+
+        return out
 
     def stn(self, x, theta):
         # theta must be (Bs, 3, 4) = [R|t]
         #theta = theta.view(-1, 2, 3)
 
         grid = F.affine_grid(theta, x.size())
-        img = F.grid_sample(x, grid)
-
-        return img
+        out = F.grid_sample(x, grid, padding_mode='zeros')
+        return out
 
     def _rshp2d(self, z):
         return z.view(-1, z.size(1), 1, 1)
@@ -196,13 +240,11 @@ class HoloNet(nn.Module):
         h5 = self.adain_3(self.ups_2d(self.rb1_2d(h4_proj)))
         z3_mean, z3_var = self._split(self._rshp2d(self.z_mlp3(z)))
         h5 = h5*z3_var + z3_mean
-        h_last = h5
 
-        if self.use_64px:
-            h6 = self.adain_4(self.ups_2d(self.rb2_2d(h5)))
-            z4_mean, z4_var = self._split(self._rshp2d(self.z_mlp4(z)))
-            h6 = h6*z4_var + z4_mean
-            h_last = h6
+        h6 = self.adain_4(self.ups_2d(self.rb2_2d(h5)))
+        z4_mean, z4_var = self._split(self._rshp2d(self.z_mlp4(z)))
+        h6 = h6*z4_var + z4_mean
+        h_last = h6
 
         #h7 = self.adain_5(self.ups_2d(self.rb3_2d(h6)))
         #z5_mean, z5_var = self._split(self._rshp2d(self.z_mlp5(z)))
