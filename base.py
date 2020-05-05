@@ -21,10 +21,8 @@ class GAN:
                  lamb=0.,
                  opt_g=optim.Adam,
                  opt_d=optim.Adam,
-                 opt_mi=optim.Adam,
                  opt_d_args={'lr': 0.0002, 'betas': (0.5, 0.999)},
                  opt_g_args={'lr': 0.0002, 'betas': (0.5, 0.999)},
-                 opt_mi_args={'lr': 0.0002, 'betas': (0.5, 0.999)},
                  update_g_every=5,
                  handlers=[],
                  scheduler_fn=None,
@@ -47,11 +45,6 @@ class GAN:
             'g': optim_g,
             'd': optim_d,
         }
-        # HACK: this is actually both the MI network
-        # and G.
-        self.optim_mi = opt_mi(filter(lambda p: p.requires_grad,
-                                      chain(self.d.parameters(),
-                                            self.g.parameters())), **opt_mi_args)
 
         self.scheduler = {}
         if scheduler_fn is not None:

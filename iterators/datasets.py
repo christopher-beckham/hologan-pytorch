@@ -22,7 +22,7 @@ class CelebADataset(Dataset):
     def __getitem__(self, index):
         filepath = self.files[index % len(self.files)]
         filename = filepath.split('/')[-1]
-        img = self.transform(Image.open(filepath))
+        img = self.transform(Image.open(filepath).convert('RGB'))
         return img
 
     def __len__(self):

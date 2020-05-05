@@ -109,13 +109,13 @@ class FirstResBlockDiscriminator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self,
                  nf,
-                 z_dim,
                  input_nc=3,
                  n_out=1,
+                 n_classes=0,
                  sigmoid=False,
-                 z_extra_fc=False,
-                 lite=False,
                  spec_norm=False):
+        """
+        """
         super(Discriminator, self).__init__()
 
         if spec_norm:
@@ -123,7 +123,9 @@ class Discriminator(nn.Module):
         else:
             self.spec_norm = lambda x : x
 
-        self.model = nn.Sequential(
+        self.relu = nn.ReLU()
+
+        self.base = nn.Sequential(
             FirstResBlockDiscriminator(input_nc, nf,
                                        stride=2, spec_norm=spec_norm),
             ResBlockDiscriminator(nf, nf*2,
@@ -132,74 +134,50 @@ class Discriminator(nn.Module):
                                   stride=2, spec_norm=spec_norm),
             ResBlockDiscriminator(nf*4, nf*8,
                                   stride=2, spec_norm=spec_norm),
-            ResBlockDiscriminator(nf*8, nf*8,
-                                  spec_norm=spec_norm) if not lite else nn.Identity(),
-            nn.ReLU(),
-            #nn.AvgPool2d(4),
-            nn.AdaptiveAvgPool2d(1)
         )
+
+        self.d = ResBlockDiscriminator(nf*8, nf*8,
+                                       spec_norm=spec_norm)
+        self.q = ResBlockDiscriminator(nf*8, nf*8,
+                                       spec_norm=spec_norm)
 
         self.fc = nn.Linear(nf*8, n_out)
         nn.init.xavier_uniform(self.fc.weight.data, 1.)
         self.fc = self.spec_norm(self.fc)
 
-        if not z_extra_fc:
-            self.fc_z = nn.Linear(nf*8, z_dim)
-            nn.init.xavier_uniform(self.fc_z.weight.data, 1.)
-            self.fc_z = self.spec_norm(self.fc_z)
+        self.pool = nn.AvgPool2d(4)
+
+        if n_classes > 0:
+            self.cls = nn.Linear(nf*8, n_classes+3)
+            nn.init.xavier_uniform(self.cls.weight.data, 1.)
+            self.cls = self.spec_norm(self.cls)
         else:
-            fc1 = nn.Linear(nf*8, nf*4)
-            nn.init.xavier_uniform(fc1.weight.data, 1.)
-            fc2 = nn.Linear(nf*4, z_dim)
-            nn.init.xavier_uniform(fc2.weight.data, 1.)
-            self.fc_z = nn.Sequential(
-                self.spec_norm(fc1),
-                nn.ReLU(),
-                self.spec_norm(fc2)
-            )
+            self.cls = None
 
         self.sigmoid = sigmoid
+        self.n_classes = n_classes
+
+    #def encode(self, x):
+    #    x = self.base(x)
+    #    return x
 
     def forward(self, x):
-        x = self.model(x)
-        x = x.view(-1, x.size(1))
-        result = self.fc(x)
-        pred_z = self.fc_z(x)
+        h = self.base(x)
+
+        h_d = self.pool(self.d(h))
+        h_q = self.pool(self.q(h))
+
+        h_d = h_d.view(-1, h_d.size(1))
+        h_q = h_q.view(-1, h_q.size(1))
+
+        pred_d = self.fc(h_d)
         if self.sigmoid:
-            result = F.sigmoid(result)
-        return result, pred_z
+            pred_d = F.sigmoid(pred_d)
 
-class MI(nn.Module):
-    def __init__(self,
-                 nf,
-                 z_dim,
-                 input_nc=3):
-        super(MI, self).__init__()
-
-        model = [nn.Conv2d(input_nc, nf, kernel_size=3, padding=1),
-                 nn.InstanceNorm2d(nf),
-                 nn.ReLU()]
-        n_ds = 3
-        for i in range(n_ds):
-            mult = 2**i
-            mult2 = 2**(i+1)
-            model += [
-                nn.Conv2d(nf*mult, nf*mult2, kernel_size=3, padding=1, stride=2),
-                nn.InstanceNorm2d(nf*mult2),
-                nn.ReLU()
-            ]
-        model += [nn.AdaptiveAvgPool2d(1)]
-        self.model = nn.Sequential(*model)
-
-        self.fc_z = nn.Linear(nf*mult2, z_dim)
-        nn.init.xavier_uniform(self.fc_z.weight.data, 1.)
-
-        self.fc_theta = nn.Linear(nf*mult2, 3)
-        nn.init.xavier_uniform(self.fc_theta.weight.data, 1.)
-
-    def forward(self, x):
-        x = self.model(x)
-        x = x.view(-1, x.size(1))
-        pred_z = self.fc_z(x)
-        pred_theta = self.fc_theta(x)
-        return pred_z, pred_theta
+        if self.cls is not None:
+            pred_zt = self.cls(h_q)
+            pred_z = pred_zt[:, 0:self.n_classes]
+            pred_t = pred_zt[:, self.n_classes:]
+        else:
+            pred_z, pred_t = None
+        return pred_d, pred_z, pred_t
