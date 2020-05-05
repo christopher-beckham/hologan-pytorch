@@ -4,11 +4,6 @@ This repo is a loose reimplementation of HoloGAN, originally by Nguyen-Phuoc et 
 
 I do not claim or guarantee any correctness of this implementation. This was implemented indepedently without consulting any of the original authors of the paper or other code.
 
-There are two issues I am trying to iron out (see my 'notes' section below):
-- Stability of the identity regulariser term (this might require a reformulation of the discriminator network to have a deeper/wider branch for the z prediction)
-- Oscilliating rotations (i.e. left-right-left-right behaviour, rather than left-right)
-- Official code uses trilinear sampling for rotation. PyTorch only has bilinear for 3D. TODO add trilinear, though it is slow since it's not a C/CUDA implementation.
-
 ## How to run
 
 First, download the CelebA dataset, extract the images inside `img_align_celeba` to some directory, and export the environment variable `DATASET_CELEBA` to point to this folder (for instance, by running the command `export DATASET_CELEBA=/datasets/celeba/img_align_celeba`).
