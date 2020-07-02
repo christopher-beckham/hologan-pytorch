@@ -10,7 +10,8 @@ import random
 import string
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
-from iterators.datasets import CelebADataset
+from iterators.datasets import (CelebADataset,
+                                CarsDataset)
 from torchvision.transforms import transforms
 from architectures import arch
 from collections import OrderedDict
@@ -28,6 +29,8 @@ except:
 def parse_args():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--name', type=str, default=None)
+    parser.add_argument('--dataset', type=str, default='celeba',
+                        choices=['celeba', 'cars'])
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--angles', type=str, default="[0,0,-45,45,0,0]",
                         help="""
@@ -103,8 +106,12 @@ train_transforms = [
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ]
 
-ds = CelebADataset(root=os.environ['DATASET_CELEBA'],
-                   transforms_=train_transforms)
+if args['dataset'] == 'celeba':
+    ds = CelebADataset(root=os.environ['DATASET_CELEBA'],
+                       transforms_=train_transforms)
+else:
+    ds = CarsDataset(root=os.environ['DATASET_CARS'],
+                     transforms_=train_transforms)
 loader = DataLoader(ds,
                     batch_size=args['batch_size'],
                     shuffle=True,
@@ -201,7 +208,7 @@ if args['interactive']:
     if gan.use_cuda:
         z_batch = z_batch.cuda()
 
-    for axis in ['x', 'y', 'z']:
+    for axis in ['y']:
         print("Generating frames for axis %s..." % axis)
 
         tmp_dir = tempfile.mkdtemp()
@@ -219,9 +226,8 @@ if args['interactive']:
         generate_rotations(gan,
                            z_batch,
                            tmp_dir,
-                           num=200,
-                           min_angle=-np.pi/2,
-                           max_angle=np.pi/2)
+                           axis,
+                           num=500)
 
         # Remove old mp4 file if it exists.
         if os.path.exists("%s/out.mp4" % out_mp4_dir):
