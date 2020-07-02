@@ -6,6 +6,8 @@ I do not claim or guarantee any correctness of this implementation. This was imp
 
 ## How to run
 
+### CelebA
+
 First, download the CelebA dataset, extract the images inside `img_align_celeba` to some directory, and export the environment variable `DATASET_CELEBA` to point to this folder (for instance, by running the command `export DATASET_CELEBA=/datasets/celeba/img_align_celeba`).
 
 Then, run `python task_launcher.py`. To run the example training script, cd into `exps` and run `example.sh`.
@@ -13,6 +15,18 @@ Then, run `python task_launcher.py`. To run the example training script, cd into
 Here is an example set of interpolations at 200 epochs.
 
 <img src="https://github.com/christopher-beckham/hologan-pytorch/blob/dev/example_training.png?raw=true" width="800" />
+
+### Cars
+
+Download the [Cars](https://ai.stanford.edu/~jkrause/cars/car_dataset.html) dataset. You will need to put this dataset in a folder with the environment variable `DATASET_CARS` pointing to it, and using `--dataset=cars` in the task launcher. For instance:
+
+```
+cd some_directory
+wget http://imagenet.stanford.edu/internal/car196/cars_train.tgz
+wget http://imagenet.stanford.edu/internal/car196/cars_test.tgz
+tar -xvzf cars_train.tgz
+tar -xvzf cars_test.tgz
+```
 
 ## Notes
 
